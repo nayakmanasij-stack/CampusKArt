@@ -276,17 +276,52 @@ function handleCategorySelect(cat) {
 }
 
 // ==================== FILTERING & SEARCHING ====================
-function handleSearch(query) {
+async function handleSearch(query) {
   activeFilters.search = query.toLowerCase().trim();
-  renderProducts();
-}
 
-function handleLocationFilter() {
-  const checkedLocations = Array.from(
-    document.querySelectorAll('input[name="location"]:checked')
-  ).map((el) => el.value);
-  activeFilters.locations = checkedLocations;
+  if (!activeFilters.search) {
+    // If search is empty, load all listings
+    await loadListingsFromSupabase();
+    return;
+  }
+
+  // Search directly in Supabase
+  const { data, error } = await db
+    .from('listings')
+    .select('*, users(name)')
+    .eq('status', 'active')
+    .or(
+      `title.ilike.%${activeFilters.search}%,description.ilike.%${activeFilters.search}%`
+    )
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Search error:', error);
+    return;
+  }
+
+  // Update listings array with search results
+  listings = (data || []).map((item) => ({
+    id: item.id,
+    title: item.title,
+    description: item.description || '',
+    price: item.price,
+    category: item.category,
+    condition: item.condition,
+    location: item.hostel_block || 'SRM Campus',
+    date: new Date(item.created_at).toLocaleDateString('en-IN'),
+    seller: item.users?.name || 'SRM Student',
+    initials: getInitials(item.users?.name || 'SRM Student'),
+    imageSrc: item.images?.[0] || null,
+    iconType: item.category.toLowerCase(),
+    imageColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    user_id: item.user_id,
+  }));
+
   renderProducts();
+  console.log(
+    `✅ Found ${listings.length} results for "${activeFilters.search}"`
+  );
 }
 
 function handleConditionFilter() {
