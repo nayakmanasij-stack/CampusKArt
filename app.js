@@ -610,19 +610,43 @@ function triggerFileInput() {
   document.getElementById('sell-image-file').click();
 }
 
-function handleImageSelect(event) {
+async function handleImageSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
 
+  // Show preview immediately
   const reader = new FileReader();
   reader.onload = function (e) {
-    selectedNewListingImage = e.target.result;
-    document.getElementById('image-preview-element').src =
-      selectedNewListingImage;
+    document.getElementById('image-preview-element').src = e.target.result;
     document.getElementById('upload-zone-content').style.display = 'none';
     document.getElementById('upload-zone-preview').style.display = 'block';
   };
   reader.readAsDataURL(file);
+
+  // Upload to Supabase Storage
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${currentUser.id}/${Date.now()}.${fileExt}`;
+
+  const { data, error } = await db.storage
+    .from('listing-images')
+    .upload(fileName, file, {
+      cacheControl: '3600',
+      upsert: false,
+    });
+
+  if (error) {
+    console.error('Image upload error:', error);
+    alert('Image upload failed: ' + error.message);
+    return;
+  }
+
+  // Get public URL
+  const {
+    data: { publicUrl },
+  } = db.storage.from('listing-images').getPublicUrl(fileName);
+
+  selectedNewListingImage = publicUrl;
+  console.log('✅ Image uploaded:', publicUrl);
 }
 
 function removeImageSelect(event = null) {
@@ -684,19 +708,164 @@ async function handleNewListing(event) {
 }
 
 // ==================== OTHER HELPERS ====================
-function openMyListings() {
+async function openMyListings() {
   closeProfileDropdown();
 
-  // Set search filter to currentUser name
-  activeFilters.search = currentUser.name.toLowerCase();
+  const { data, error } = await db
+    .from('listings')
+    .select('*')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: false });
 
-  // Highlight search or update text
-  document.getElementById('search-input').value = currentUser.name;
+  if (error) {
+    console.error('Error loading listings:', error);
+    return;
+  }
 
-  renderProducts();
-  showToast('Showing your listings');
+  const existingModal = document.getElementById('my-listings-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'my-listings-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  const items = data || [];
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width: 90%; max-width: 680px;
+      background: rgba(13, 18, 30, 0.95);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+    ">
+      <!-- Header -->
+      <div style="
+        padding: 24px 28px 20px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(139,92,246,0.04);
+      ">
+        <div>
+          <h2 style="font-size:1.25rem; font-weight:700; color:#f3f4f6; letter-spacing:-0.02em;">My Listings</h2>
+          <p style="font-size:0.8rem; color:#9ca3af; margin-top:2px;">${items.length} item${items.length !== 1 ? 's' : ''} posted</p>
+        </div>
+        <button onclick="document.getElementById('my-listings-modal').remove()" style="
+          width:36px; height:36px; border-radius:50%;
+          background:rgba(255,255,255,0.05);
+          border:1px solid rgba(255,255,255,0.08);
+          color:#9ca3af; cursor:pointer; font-size:1.1rem;
+          display:flex; align-items:center; justify-content:center;
+          transition: all 0.2s;
+        ">✕</button>
+      </div>
+
+      <!-- Body -->
+      <div style="overflow-y:auto; padding:20px 28px; flex:1;">
+        ${
+          items.length === 0
+            ? `
+          <div style="text-align:center; padding:60px 0;">
+            <div style="font-size:3rem; margin-bottom:12px;">📦</div>
+            <h3 style="color:#f3f4f6; font-size:1rem; margin-bottom:8px;">No listings yet</h3>
+            <p style="color:#9ca3af; font-size:0.85rem;">Post your first item to get started</p>
+          </div>
+        `
+            : items
+                .map(
+                  (item) => `
+          <div style="
+            display:flex; gap:16px; align-items:center;
+            padding:16px; margin-bottom:12px;
+            background:rgba(255,255,255,0.02);
+            border:1px solid rgba(255,255,255,0.06);
+            border-radius:14px;
+            transition: all 0.2s;
+          ">
+            <!-- Image -->
+            <div style="
+              width:72px; height:72px; border-radius:10px; overflow:hidden; flex-shrink:0;
+              background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+              display:flex; align-items:center; justify-content:center;
+            ">
+              ${
+                item.images?.[0]
+                  ? `<img src="${item.images[0]}" style="width:100%;height:100%;object-fit:cover;">`
+                  : `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path></svg>`
+              }
+            </div>
+
+            <!-- Info -->
+            <div style="flex:1; min-width:0;">
+              <h4 style="
+                font-size:0.95rem; font-weight:600; color:#f3f4f6;
+                margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+              ">${item.title}</h4>
+              <p style="font-size:1rem; font-weight:700; color:#8b5cf6; margin-bottom:4px;">₹${item.price}</p>
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="
+                  font-size:0.75rem; color:#9ca3af;
+                  background:rgba(255,255,255,0.04);
+                  padding:2px 8px; border-radius:20px;
+                  border:1px solid rgba(255,255,255,0.06);
+                ">${item.condition}</span>
+                <span style="
+                  font-size:0.75rem; font-weight:600;
+                  color:${item.status === 'sold' ? '#ef4444' : '#10b981'};
+                  background:${item.status === 'sold' ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)'};
+                  padding:2px 8px; border-radius:20px;
+                  border:1px solid ${item.status === 'sold' ? 'rgba(239,68,68,0.2)' : 'rgba(16,185,129,0.2)'};
+                ">${item.status === 'sold' ? '● Sold' : '● Active'}</span>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div style="display:flex; flex-direction:column; gap:6px; flex-shrink:0;">
+              <button onclick="editListing('${item.id}')" style="
+                padding:7px 16px; border-radius:8px; font-size:0.8rem; font-weight:600;
+                border:1px solid rgba(139,92,246,0.4);
+                background:rgba(139,92,246,0.1); color:#8b5cf6;
+                cursor:pointer; transition:all 0.2s; white-space:nowrap;
+              ">✏️ Edit</button>
+              ${
+                item.status !== 'sold'
+                  ? `
+              <button onclick="markAsSold('${item.id}')" style="
+                padding:7px 16px; border-radius:8px; font-size:0.8rem; font-weight:600;
+                border:1px solid rgba(16,185,129,0.4);
+                background:rgba(16,185,129,0.1); color:#10b981;
+                cursor:pointer; transition:all 0.2s; white-space:nowrap;
+              ">✅ Mark Sold</button>`
+                  : ''
+              }
+              <button onclick="deleteListing('${item.id}')" style="
+                padding:7px 16px; border-radius:8px; font-size:0.8rem; font-weight:600;
+                border:1px solid rgba(239,68,68,0.3);
+                background:rgba(239,68,68,0.08); color:#ef4444;
+                cursor:pointer; transition:all 0.2s; white-space:nowrap;
+              ">🗑️ Delete</button>
+            </div>
+          </div>
+        `
+                )
+                .join('')
+        }
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
 }
-
 function getInitials(name) {
   const parts = name.split(' ');
   if (parts.length >= 2) {
@@ -874,21 +1043,35 @@ async function handleRegister(event) {
   btn.disabled = false;
   switchAuthTab('signin');
 }
-function showMainApp() {
+async function showMainApp() {
+  // Ensure user exists in users table
+  const { data: existingUser } = await db
+    .from('users')
+    .select('id')
+    .eq('id', currentUser.id)
+    .single();
+
+  if (!existingUser) {
+    await db.from('users').insert({
+      id: currentUser.id,
+      name: currentUser.email.split('@')[0],
+      email: currentUser.email,
+    });
+  }
+
   // Hide auth screen
   document.getElementById('auth-screen').classList.remove('active');
 
   // Show marketplace screen
   document.getElementById('marketplace-screen').classList.add('active');
 
-  // Update user name in navbar if it exists
   const userNameEl = document.getElementById('user-name');
   if (userNameEl && currentUser) {
     userNameEl.textContent = currentUser.email.split('@')[0];
   }
 
-  console.log('✅ Logged in as:', currentUser.email);
   loadListingsFromSupabase();
+  console.log('✅ Logged in as:', currentUser.email);
 }
 async function handleLogout() {
   const { error } = await db.auth.signOut();
@@ -1135,4 +1318,179 @@ async function openSavedItems() {
   `;
 
   document.body.appendChild(savedModal);
+}
+// ==================== LISTING MANAGEMENT ====================
+
+async function markAsSold(listingId) {
+  if (!confirm('Mark this item as sold?')) return;
+
+  const { error } = await db
+    .from('listings')
+    .update({ status: 'sold' })
+    .eq('id', listingId)
+    .eq('user_id', currentUser.id);
+
+  if (error) {
+    alert('Error: ' + error.message);
+    return;
+  }
+
+  showToast('Item marked as sold!');
+  loadListingsFromSupabase();
+  openMyListings();
+}
+
+async function deleteListing(listingId) {
+  if (
+    !confirm(
+      'Are you sure you want to delete this listing? This cannot be undone.'
+    )
+  )
+    return;
+
+  const { error } = await db
+    .from('listings')
+    .delete()
+    .eq('id', listingId)
+    .eq('user_id', currentUser.id);
+
+  if (error) {
+    alert('Error: ' + error.message);
+    return;
+  }
+
+  showToast('Listing deleted!');
+  loadListingsFromSupabase();
+  openMyListings();
+}
+
+async function editListing(listingId) {
+  const { data: item, error } = await db
+    .from('listings')
+    .select('*')
+    .eq('id', listingId)
+    .single();
+
+  if (error || !item) {
+    alert('Could not load listing');
+    return;
+  }
+
+  document.getElementById('my-listings-modal')?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'edit-listing-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width:90%; max-width:500px;
+      background:rgba(13,18,30,0.95);
+      backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:20px; overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.6);
+    ">
+      <!-- Header -->
+      <div style="
+        padding:22px 28px 18px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+        display:flex; justify-content:space-between; align-items:center;
+        background:rgba(139,92,246,0.04);
+      ">
+        <div>
+          <h2 style="font-size:1.1rem; font-weight:700; color:#f3f4f6;">Edit Listing</h2>
+          <p style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">Update your listing details</p>
+        </div>
+        <button onclick="document.getElementById('edit-listing-modal').remove()" style="
+          width:34px; height:34px; border-radius:50%;
+          background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+          color:#9ca3af; cursor:pointer; font-size:1rem;
+        ">✕</button>
+      </div>
+
+      <!-- Form -->
+      <div style="padding:24px 28px; display:flex; flex-direction:column; gap:18px;">
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Title</label>
+          <input id="edit-title" value="${item.title}" style="
+            width:100%; margin-top:6px; padding:11px 14px;
+            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+            border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+            outline:none; transition:border 0.2s;
+          ">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Price (₹)</label>
+          <input id="edit-price" type="number" value="${item.price}" style="
+            width:100%; margin-top:6px; padding:11px 14px;
+            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+            border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+            outline:none;
+          ">
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Description</label>
+          <textarea id="edit-description" rows="3" style="
+            width:100%; margin-top:6px; padding:11px 14px;
+            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+            border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+            outline:none; resize:vertical;
+          ">${item.description || ''}</textarea>
+        </div>
+        <div>
+          <label style="font-size:0.78rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Condition</label>
+          <select id="edit-condition" style="
+            width:100%; margin-top:6px; padding:11px 14px;
+            background:rgba(17,24,39,0.9); border:1px solid rgba(255,255,255,0.08);
+            border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+            outline:none;
+          ">
+            <option ${item.condition === 'Brand New' ? 'selected' : ''}>Brand New</option>
+            <option ${item.condition === 'Like New' ? 'selected' : ''}>Like New</option>
+            <option ${item.condition === 'Good' ? 'selected' : ''}>Good</option>
+            <option ${item.condition === 'Fair' ? 'selected' : ''}>Fair</option>
+          </select>
+        </div>
+        <button onclick="saveEditedListing('${item.id}')" style="
+          padding:13px; border-radius:12px; font-size:0.95rem; font-weight:700;
+          background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+          color:white; border:none; cursor:pointer;
+          box-shadow:0 4px 20px rgba(139,92,246,0.3);
+          transition:all 0.2s; font-family:inherit;
+        ">Save Changes</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+async function saveEditedListing(listingId) {
+  const title = document.getElementById('edit-title').value.trim();
+  const price = parseInt(document.getElementById('edit-price').value);
+  const description = document.getElementById('edit-description').value.trim();
+  const condition = document.getElementById('edit-condition').value;
+
+  if (!title || !price) {
+    alert('Title and price are required!');
+    return;
+  }
+
+  const { error } = await db
+    .from('listings')
+    .update({ title, price, description, condition })
+    .eq('id', listingId)
+    .eq('user_id', currentUser.id);
+
+  if (error) {
+    alert('Error saving: ' + error.message);
+    return;
+  }
+
+  showToast('Listing updated successfully!');
+  document.getElementById('edit-listing-modal')?.remove();
+  loadListingsFromSupabase();
 }
