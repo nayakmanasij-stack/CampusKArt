@@ -867,7 +867,9 @@ async function handleRegister(event) {
     email: email,
   });
 
-  alert('Account created! You can now sign in.');
+  alert(
+    'Account created! \n\nA verification link has been sent to your SRM email inbox.\n\nPlease check your email and click the link to activate your account before signing in.'
+  );
   btn.textContent = 'Create Account';
   btn.disabled = false;
   switchAuthTab('signin');
