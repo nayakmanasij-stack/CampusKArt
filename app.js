@@ -9,144 +9,7 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 let currentUser = null;
 
 // Initial mockup data for CampusKArt listings
-let listings = [
-  {
-    id: 1,
-    title: 'Engineering Mathematics - III (T. Veerarajan)',
-    category: 'Books',
-    price: 450,
-    condition: 'Like New',
-    location: 'Adhiyaman Hostel',
-    date: '2 hours ago',
-    seller: 'Aditya Sharma',
-    initials: 'AS',
-    description:
-      'Hardcopy textbook by T. Veerarajan, highly recommended for ME/ECE/CSE 3rd Semester. No highlighting, no bent pages, and covers are intact. Clean condition.',
-    imageColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    iconType: 'book',
-    imageSrc:
-      'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 2,
-    title: 'Hero Ranger Mountain Cycle (21-Speed)',
-    category: 'Cycles',
-    price: 3500,
-    condition: 'Good',
-    location: 'Paari Hostel',
-    date: '1 day ago',
-    seller: 'Rohan Verma',
-    initials: 'RV',
-    description:
-      "Used for 1 year for commuting between hostel and tech park. Dual disk brakes, front suspension, 21-speed Shimano gears. Tires are in good shape. Selling since I'm graduating.",
-    imageColor: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-    iconType: 'cycle',
-    imageSrc:
-      'https://images.unsplash.com/photo-1485965120184-e220f721d03e?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 3,
-    title: 'Apple iPad Air (4th Gen) 64GB Wi-Fi',
-    category: 'Electronics',
-    price: 26000,
-    condition: 'Like New',
-    location: 'Tech Park',
-    date: '3 hours ago',
-    seller: 'Sneha Patel',
-    initials: 'SP',
-    description:
-      'Space Grey color. Comes with the original box, charger, and a magnetic folio case. Screen guard has been installed since day one. Excellent for digital note-taking and lectures.',
-    imageColor: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-    iconType: 'tablet',
-    imageSrc:
-      'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 4,
-    title: 'SRM Lab Coat + Protective Goggles',
-    category: 'Fashion',
-    price: 250,
-    condition: 'Brand New',
-    location: 'Kaari Hostel',
-    date: '5 hours ago',
-    seller: 'Varun Sen',
-    initials: 'VS',
-    description:
-      'Standard white lab coat required for Chemistry and Biotech labs. Size L. Never worn because I bought the wrong size. Safety goggles are scratch-free and included.',
-    imageColor: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-    iconType: 'apparel',
-    imageSrc:
-      'https://images.unsplash.com/photo-1576086213369-97a306d36557?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 5,
-    title: 'KENT Electric Kettle (1.8 Liters)',
-    category: 'Hostel Essentials',
-    price: 600,
-    condition: 'Good',
-    location: 'MGR Hostel',
-    date: '1 day ago',
-    seller: 'Priya Nair',
-    initials: 'PN',
-    description:
-      'Works perfectly. Fast boiling (1500W), stainless steel body, auto shut-off, and boil-dry protection. Ideal for making late-night noodles, tea, or coffee in hostels.',
-    imageColor: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-    iconType: 'kettle',
-    imageSrc:
-      'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 6,
-    title: 'Canon EOS 1500D DSLR Camera',
-    category: 'Electronics',
-    price: 18500,
-    condition: 'Brand New',
-    location: 'Tech Park',
-    date: '4 days ago',
-    seller: 'Manasij Nayak',
-    initials: 'MN',
-    description:
-      'Brand new, sealed package. Won it in a college hackathon prize, but I already have a camera and do not need it. Standard 18-55mm IS II kit lens included. Original bill & warranty card inside.',
-    imageColor: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)',
-    iconType: 'camera',
-    imageSrc:
-      'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 7,
-    title: 'HC Verma Physics Concepts (Vol 1 & 2)',
-    category: 'Books',
-    price: 300,
-    condition: 'Fair',
-    location: 'Senbagam Hostel',
-    date: '3 days ago',
-    seller: 'Riya Sharma',
-    initials: 'RS',
-    description:
-      'Famous textbook set for physics. Has some pencil annotations and highlighted sections, but pages are fully readable and bindings are solid. Best for competitive prep.',
-    imageColor: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)',
-    iconType: 'book',
-    imageSrc:
-      'https://images.unsplash.com/photo-1589829085413-56de8ae18c73?w=500&auto=format&fit=crop&q=60',
-  },
-  {
-    id: 8,
-    title: 'Rechargeable LED Desk Lamp (3 Modes)',
-    category: 'Hostel Essentials',
-    price: 400,
-    condition: 'Like New',
-    location: 'Estancia',
-    date: '12 hours ago',
-    seller: 'Kabir Singh',
-    initials: 'KS',
-    description:
-      'Eye-protection LED lamp with 3 brightness levels. Features touch controls, flexible gooseneck, and USB charging. Built-in battery lasts up to 6 hours on a single charge.',
-    imageColor: 'linear-gradient(135deg, #fdfcfb 0%, #e2d1c3 100%)',
-    iconType: 'lamp',
-    imageSrc:
-      'https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=500&auto=format&fit=crop&q=60',
-  },
-];
+let listings = [];
 
 const categories = [
   'All',
@@ -1104,6 +967,15 @@ async function showMainApp() {
   if (userNameEl && currentUser) {
     userNameEl.textContent = currentUser.email.split('@')[0];
   }
+  // Update dropdown with real user info
+  const dropdownName = document.getElementById('dropdown-name');
+  const dropdownEmail = document.getElementById('dropdown-email');
+  const userInitials = document.getElementById('user-initials');
+
+  if (dropdownName) dropdownName.textContent = currentUser.email.split('@')[0];
+  if (dropdownEmail) dropdownEmail.textContent = currentUser.email;
+  if (userInitials)
+    userInitials.textContent = getInitials(currentUser.email.split('@')[0]);
 
   loadListingsFromSupabase();
   console.log('✅ Logged in as:', currentUser.email);
@@ -1528,4 +1400,248 @@ async function saveEditedListing(listingId) {
   showToast('Listing updated successfully!');
   document.getElementById('edit-listing-modal')?.remove();
   loadListingsFromSupabase();
+}
+// ==================== USER PROFILE ====================
+async function openProfile() {
+  closeProfileDropdown();
+
+  // Fetch user data from users table
+  const { data: userData } = await db
+    .from('users')
+    .select('*')
+    .eq('id', currentUser.id)
+    .single();
+
+  // Fetch user's listing count
+  const { count: listingCount } = await db
+    .from('listings')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', currentUser.id);
+
+  // Fetch saved items count
+  const { count: savedCount } = await db
+    .from('saved_items')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', currentUser.id);
+
+  const user = userData || {};
+  const name = user.name || currentUser.email.split('@')[0];
+  const initials = getInitials(name);
+
+  const existingModal = document.getElementById('profile-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'profile-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width:90%; max-width:520px;
+      background:rgba(13,18,30,0.97);
+      backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:24px; overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.7);
+    ">
+      <!-- Cover + Avatar -->
+      <div style="
+        height:110px;
+        background:linear-gradient(135deg,#8b5cf6 0%,#3d3f98 50%,#1e1b4b 100%);
+        position:relative;
+      ">
+        <!-- Close button -->
+        <button onclick="document.getElementById('profile-modal').remove()" style="
+          position:absolute; top:14px; right:14px;
+          width:32px; height:32px; border-radius:50%;
+          background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15);
+          color:white; cursor:pointer; font-size:0.9rem;
+          display:flex; align-items:center; justify-content:center;
+        ">✕</button>
+
+        <!-- Avatar -->
+        <div style="
+          position:absolute; bottom:-40px; left:28px;
+          width:80px; height:80px; border-radius:50%;
+          border:3px solid rgba(13,18,30,0.97);
+          overflow:hidden; cursor:pointer;
+          background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+          display:flex; align-items:center; justify-content:center;
+        " onclick="document.getElementById('avatar-upload').click()">
+          ${
+            user.avatar_url
+              ? `<img src="${user.avatar_url}" style="width:100%;height:100%;object-fit:cover;">`
+              : `<span style="font-size:1.8rem;font-weight:700;color:white;">${initials}</span>`
+          }
+          <div style="
+            position:absolute; inset:0; background:rgba(0,0,0,0.4);
+            display:flex; align-items:center; justify-content:center;
+            opacity:0; transition:opacity 0.2s;
+            border-radius:50%;
+          " onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0'">
+            <span style="font-size:1.2rem;">📷</span>
+          </div>
+        </div>
+        <input type="file" id="avatar-upload" accept="image/*" style="display:none" onchange="uploadAvatar(event)">
+      </div>
+
+      <!-- Profile Info -->
+      <div style="padding:52px 28px 28px;">
+        <!-- Name & Email -->
+        <div style="margin-bottom:20px;">
+          <h2 style="font-size:1.3rem; font-weight:700; color:#f3f4f6; margin-bottom:4px;">${name}</h2>
+          <p style="font-size:0.85rem; color:#8b5cf6;">${currentUser.email}</p>
+          <div style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+            <span style="
+              font-size:0.75rem; color:#10b981; font-weight:600;
+              background:rgba(16,185,129,0.1); padding:3px 10px;
+              border-radius:20px; border:1px solid rgba(16,185,129,0.2);
+            ">✓ SRM Verified</span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div style="
+          display:grid; grid-template-columns:1fr 1fr;
+          gap:12px; margin-bottom:24px;
+        ">
+          <div style="
+            padding:16px; border-radius:14px;
+            background:rgba(139,92,246,0.08);
+            border:1px solid rgba(139,92,246,0.15);
+            text-align:center;
+          ">
+            <p style="font-size:1.8rem; font-weight:800; color:#8b5cf6;">${listingCount || 0}</p>
+            <p style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">Listings Posted</p>
+          </div>
+          <div style="
+            padding:16px; border-radius:14px;
+            background:rgba(16,185,129,0.08);
+            border:1px solid rgba(16,185,129,0.15);
+            text-align:center;
+          ">
+            <p style="font-size:1.8rem; font-weight:800; color:#10b981;">${savedCount || 0}</p>
+            <p style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">Items Saved</p>
+          </div>
+        </div>
+
+        <!-- Edit Form -->
+        <div style="display:flex; flex-direction:column; gap:14px;">
+          <div>
+            <label style="font-size:0.75rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Full Name</label>
+            <input id="profile-name" value="${name}" style="
+              width:100%; margin-top:6px; padding:11px 14px;
+              background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+              border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+              outline:none;
+            ">
+          </div>
+          <div>
+            <label style="font-size:0.75rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Hostel Block</label>
+            <input id="profile-hostel" value="${user.hostel_block || ''}" placeholder="e.g. Adhiyaman Block C" style="
+              width:100%; margin-top:6px; padding:11px 14px;
+              background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+              border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+              outline:none;
+            ">
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+            <div>
+              <label style="font-size:0.75rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Year</label>
+              <select id="profile-year" style="
+                width:100%; margin-top:6px; padding:11px 14px;
+                background:rgba(17,24,39,0.9); border:1px solid rgba(255,255,255,0.08);
+                border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+                outline:none;
+              ">
+                <option value="">Select</option>
+                <option ${user.year === '1st Year' ? 'selected' : ''}>1st Year</option>
+                <option ${user.year === '2nd Year' ? 'selected' : ''}>2nd Year</option>
+                <option ${user.year === '3rd Year' ? 'selected' : ''}>3rd Year</option>
+                <option ${user.year === '4th Year' ? 'selected' : ''}>4th Year</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.75rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">Branch</label>
+              <input id="profile-branch" value="${user.branch || ''}" placeholder="e.g. CSE" style="
+                width:100%; margin-top:6px; padding:11px 14px;
+                background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+                border-radius:10px; color:#f3f4f6; font-size:0.9rem; font-family:inherit;
+                outline:none;
+              ">
+            </div>
+          </div>
+          <button onclick="saveProfile()" style="
+            padding:13px; border-radius:12px; font-size:0.95rem; font-weight:700;
+            background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+            color:white; border:none; cursor:pointer;
+            box-shadow:0 4px 20px rgba(139,92,246,0.3);
+            font-family:inherit; margin-top:4px;
+          ">Save Profile</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function saveProfile() {
+  const name = document.getElementById('profile-name').value.trim();
+  const hostel_block = document.getElementById('profile-hostel').value.trim();
+  const year = document.getElementById('profile-year').value;
+  const branch = document.getElementById('profile-branch').value.trim();
+
+  const { error } = await db
+    .from('users')
+    .update({ name, hostel_block, year, branch })
+    .eq('id', currentUser.id);
+
+  if (error) {
+    alert('Error saving profile: ' + error.message);
+    return;
+  }
+
+  // Update navbar
+  document.getElementById('dropdown-name').textContent = name;
+  document.getElementById('user-initials').textContent = getInitials(name);
+
+  showToast('Profile updated successfully!');
+  document.getElementById('profile-modal').remove();
+}
+
+async function uploadAvatar(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `avatars/${currentUser.id}.${fileExt}`;
+
+  // Upload to Supabase Storage
+  const { error: uploadError } = await db.storage
+    .from('listing-images')
+    .upload(fileName, file, { upsert: true });
+
+  if (uploadError) {
+    alert('Upload failed: ' + uploadError.message);
+    return;
+  }
+
+  // Get public URL
+  const {
+    data: { publicUrl },
+  } = db.storage.from('listing-images').getPublicUrl(fileName);
+
+  // Save to users table
+  await db
+    .from('users')
+    .update({ avatar_url: publicUrl })
+    .eq('id', currentUser.id);
+
+  // Update UI
+  showToast('Profile photo updated!');
+  openProfile(); // Refresh profile modal
 }
