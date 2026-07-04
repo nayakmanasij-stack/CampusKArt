@@ -529,13 +529,21 @@ function closeSellModal(event = null) {
 function triggerFileInput() {
   document.getElementById('sell-image-file').click();
 }
-
 function removeImageSelect(event = null) {
-  if (event) event.stopPropagation(); // prevent triggering upload trigger
+  if (event) event.stopPropagation();
+  selectedImages = [];
   selectedNewListingImage = null;
   document.getElementById('sell-image-file').value = '';
-  document.getElementById('upload-zone-content').style.display = 'flex';
-  document.getElementById('upload-zone-preview').style.display = 'none';
+
+  const grid = document.getElementById('image-upload-grid');
+  const addBtn = document.getElementById('add-image-btn');
+  if (grid && addBtn) {
+    // Remove all image previews except add button
+    Array.from(grid.children).forEach((child) => {
+      if (child.id !== 'add-image-btn') child.remove();
+    });
+    addBtn.style.display = 'flex';
+  }
 }
 async function handleImageSelect(event) {
   const file = event.target.files[0];
@@ -1043,6 +1051,11 @@ async function showMainApp() {
 
   loadListingsFromSupabase();
   loadNotifications();
+  // Show admin panel for admin only
+  if (currentUser.email === 'mn6733@srmist.edu.in') {
+    const adminMenu = document.getElementById('admin-menu-item');
+    if (adminMenu) adminMenu.style.display = 'block';
+  }
   setInterval(loadNotifications, 30000);
   console.log('✅ Logged in as:', currentUser.email);
 }
@@ -2280,4 +2293,491 @@ async function markAllRead() {
   document.getElementById('notif-badge').style.display = 'none';
   document.getElementById('unread-badge').style.display = 'none';
   showToast('All notifications marked as read!');
+}
+// ==================== REPORT LISTING ====================
+function openReportModal() {
+  const existingModal = document.getElementById('report-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'report-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width:90%; max-width:420px;
+      background:rgba(13,18,30,0.97);
+      backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:20px; overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.7);
+    ">
+      <!-- Header -->
+      <div style="
+        padding:20px 24px 16px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+        display:flex; justify-content:space-between; align-items:center;
+        background:rgba(239,68,68,0.04);
+      ">
+        <div>
+          <h2 style="font-size:1.1rem; font-weight:700; color:#f3f4f6;">Report Listing</h2>
+          <p style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">Help keep CampusKArt safe</p>
+        </div>
+        <button onclick="document.getElementById('report-modal').remove()" style="
+          width:32px; height:32px; border-radius:50%;
+          background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+          color:#9ca3af; cursor:pointer; font-size:1rem;
+        ">✕</button>
+      </div>
+
+      <!-- Form -->
+      <div style="padding:20px 24px;">
+        <p style="font-size:0.85rem; color:#9ca3af; margin-bottom:16px;">
+          Why are you reporting this listing?
+        </p>
+
+        <!-- Reasons -->
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:16px;">
+          ${[
+            {
+              value: 'spam',
+              label: '🚫 Spam or misleading',
+              desc: 'Fake or repetitive content',
+            },
+            {
+              value: 'fake',
+              label: '❌ Fake listing',
+              desc: "Item doesn't exist or is misrepresented",
+            },
+            {
+              value: 'inappropriate',
+              label: '⚠️ Inappropriate content',
+              desc: 'Offensive or harmful content',
+            },
+            {
+              value: 'wrong_price',
+              label: '💰 Wrong price',
+              desc: 'Price is unrealistic or misleading',
+            },
+            {
+              value: 'other',
+              label: '📝 Other reason',
+              desc: 'Something else is wrong',
+            },
+          ]
+            .map(
+              (reason) => `
+            <label style="
+              display:flex; align-items:center; gap:12px;
+              padding:12px; border-radius:10px; cursor:pointer;
+              border:1px solid rgba(255,255,255,0.06);
+              background:rgba(255,255,255,0.02);
+              transition:all 0.2s;
+            ">
+              <input type="radio" name="report-reason" value="${reason.value}" style="accent-color:#8b5cf6;">
+              <div>
+                <p style="font-size:0.88rem; font-weight:600; color:#f3f4f6;">${reason.label}</p>
+                <p style="font-size:0.75rem; color:#9ca3af;">${reason.desc}</p>
+              </div>
+            </label>
+          `
+            )
+            .join('')}
+        </div>
+
+        <!-- Details -->
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.78rem; font-weight:600; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em;">
+            Additional details (optional)
+          </label>
+          <textarea id="report-details" rows="3" placeholder="Tell us more about the issue..." style="
+            width:100%; margin-top:6px; padding:10px 14px;
+            background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+            border-radius:10px; color:#f3f4f6; font-size:0.88rem; font-family:inherit;
+            outline:none; resize:vertical; box-sizing:border-box;
+          "></textarea>
+        </div>
+
+        <button onclick="submitReport()" style="
+          width:100%; padding:13px; border-radius:12px;
+          background:linear-gradient(135deg,#ef4444,#dc2626);
+          color:white; border:none; cursor:pointer;
+          font-size:0.95rem; font-weight:700; font-family:inherit;
+          box-shadow:0 4px 20px rgba(239,68,68,0.3);
+        ">Submit Report</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function submitReport() {
+  const reasonEl = document.querySelector(
+    'input[name="report-reason"]:checked'
+  );
+  if (!reasonEl) {
+    showToast('Please select a reason!');
+    return;
+  }
+
+  const reason = reasonEl.value;
+  const details = document.getElementById('report-details').value.trim();
+
+  const { error } = await db.from('reports').insert({
+    listing_id: currentModalListingId,
+    reporter_id: currentUser.id,
+    reason: reason,
+    details: details,
+  });
+
+  if (error) {
+    alert('Error submitting report: ' + error.message);
+    return;
+  }
+
+  document.getElementById('report-modal').remove();
+  showToast('Report submitted. Thank you for keeping CampusKArt safe! 🛡️');
+}
+// ==================== ADMIN PANEL ====================
+async function openAdminPanel() {
+  closeProfileDropdown();
+
+  // Fetch all data
+  const [
+    { data: allListings },
+    { data: allUsers },
+    { data: allReports },
+    { count: totalMessages },
+  ] = await Promise.all([
+    db
+      .from('listings')
+      .select('*, users(name, email)')
+      .order('created_at', { ascending: false }),
+    db.from('users').select('*').order('created_at', { ascending: false }),
+    db
+      .from('reports')
+      .select(
+        '*, listings(title), reporter:users!reports_reporter_id_fkey(email)'
+      )
+      .order('created_at', { ascending: false }),
+    db.from('messages').select('*', { count: 'exact', head: true }),
+  ]);
+
+  const existingModal = document.getElementById('admin-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'admin-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  const activeListings = (allListings || []).filter(
+    (l) => l.status === 'active'
+  ).length;
+  const pendingReports = (allReports || []).filter(
+    (r) => r.status === 'pending'
+  ).length;
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width:95%; max-width:900px;
+      background:rgba(13,18,30,0.97);
+      backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:24px; overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.7);
+      max-height:90vh; display:flex; flex-direction:column;
+    ">
+      <!-- Header -->
+      <div style="
+        padding:22px 28px 18px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+        display:flex; justify-content:space-between; align-items:center;
+        background:rgba(245,158,11,0.04);
+      ">
+        <div>
+          <h2 style="font-size:1.2rem; font-weight:700; color:#f3f4f6;">🛡️ Admin Panel</h2>
+          <p style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">CampusKArt Moderation Dashboard</p>
+        </div>
+        <button onclick="document.getElementById('admin-modal').remove()" style="
+          width:34px; height:34px; border-radius:50%;
+          background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+          color:#9ca3af; cursor:pointer; font-size:1rem;
+        ">✕</button>
+      </div>
+
+      <!-- Stats -->
+      <div style="
+        display:grid; grid-template-columns:repeat(4,1fr);
+        gap:12px; padding:20px 28px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+      ">
+        ${[
+          {
+            label: 'Total Users',
+            value: (allUsers || []).length,
+            color: '#8b5cf6',
+            icon: '👥',
+          },
+          {
+            label: 'Active Listings',
+            value: activeListings,
+            color: '#10b981',
+            icon: '📦',
+          },
+          {
+            label: 'Total Messages',
+            value: totalMessages || 0,
+            color: '#3b82f6',
+            icon: '💬',
+          },
+          {
+            label: 'Pending Reports',
+            value: pendingReports,
+            color: '#ef4444',
+            icon: '⚠️',
+          },
+        ]
+          .map(
+            (stat) => `
+          <div style="
+            padding:16px; border-radius:14px; text-align:center;
+            background:rgba(255,255,255,0.02);
+            border:1px solid rgba(255,255,255,0.06);
+          ">
+            <div style="font-size:1.5rem; margin-bottom:6px;">${stat.icon}</div>
+            <p style="font-size:1.6rem; font-weight:800; color:${stat.color};">${stat.value}</p>
+            <p style="font-size:0.72rem; color:#9ca3af; margin-top:2px;">${stat.label}</p>
+          </div>
+        `
+          )
+          .join('')}
+      </div>
+
+      <!-- Tabs -->
+      <div style="display:flex; gap:0; border-bottom:1px solid rgba(255,255,255,0.06);">
+        ${['Reports', 'Listings', 'Users']
+          .map(
+            (tab, i) => `
+          <button onclick="adminSwitchTab('${tab.toLowerCase()}')" id="admin-tab-${tab.toLowerCase()}" style="
+            padding:12px 24px; border:none; cursor:pointer; font-family:inherit;
+            font-size:0.88rem; font-weight:600; transition:all 0.2s;
+            background:${i === 0 ? 'rgba(139,92,246,0.1)' : 'transparent'};
+            color:${i === 0 ? '#8b5cf6' : '#9ca3af'};
+            border-bottom:2px solid ${i === 0 ? '#8b5cf6' : 'transparent'};
+          ">${tab} ${tab === 'Reports' && pendingReports > 0 ? `<span style="background:#ef4444;color:white;font-size:0.65rem;padding:1px 6px;border-radius:10px;margin-left:4px;">${pendingReports}</span>` : ''}</button>
+        `
+          )
+          .join('')}
+      </div>
+
+      <!-- Content -->
+      <div style="overflow-y:auto; flex:1; padding:20px 28px;">
+
+        <!-- Reports Tab -->
+        <div id="admin-content-reports">
+          ${
+            (allReports || []).length === 0
+              ? `
+            <div style="text-align:center; padding:40px;">
+              <div style="font-size:3rem;">✅</div>
+              <p style="color:#9ca3af; margin-top:12px;">No reports yet!</p>
+            </div>
+          `
+              : (allReports || [])
+                  .map(
+                    (report) => `
+            <div style="
+              padding:16px; border-radius:12px; margin-bottom:10px;
+              background:${report.status === 'pending' ? 'rgba(239,68,68,0.05)' : 'rgba(255,255,255,0.02)'};
+              border:1px solid ${report.status === 'pending' ? 'rgba(239,68,68,0.2)' : 'rgba(255,255,255,0.05)'};
+            ">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+                <div style="flex:1;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+                    <span style="
+                      font-size:0.72rem; font-weight:700; padding:2px 8px; border-radius:20px;
+                      background:${report.status === 'pending' ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)'};
+                      color:${report.status === 'pending' ? '#ef4444' : '#10b981'};
+                    ">${report.status.toUpperCase()}</span>
+                    <span style="font-size:0.8rem; color:#f3f4f6; font-weight:600;">${report.reason.replace('_', ' ').toUpperCase()}</span>
+                  </div>
+                  <p style="font-size:0.85rem; color:#f3f4f6; margin-bottom:4px;">
+                    Listing: <strong>${report.listings?.title || 'Unknown'}</strong>
+                  </p>
+                  <p style="font-size:0.78rem; color:#9ca3af; margin-bottom:4px;">
+                    Reported by: ${report.reporter?.email || 'Unknown'}
+                  </p>
+                  ${report.details ? `<p style="font-size:0.8rem; color:#9ca3af; font-style:italic;">"${report.details}"</p>` : ''}
+                  <p style="font-size:0.72rem; color:#6b7280; margin-top:4px;">
+                    ${new Date(report.created_at).toLocaleDateString('en-IN')}
+                  </p>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:6px;">
+                  ${
+                    report.status === 'pending'
+                      ? `
+                    <button onclick="adminDeleteListing('${report.listing_id}', '${report.id}')" style="
+                      padding:6px 12px; border-radius:8px; font-size:0.75rem; font-weight:600;
+                      background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3);
+                      color:#ef4444; cursor:pointer; font-family:inherit; white-space:nowrap;
+                    ">🗑️ Delete Listing</button>
+                    <button onclick="adminResolveReport('${report.id}')" style="
+                      padding:6px 12px; border-radius:8px; font-size:0.75rem; font-weight:600;
+                      background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3);
+                      color:#10b981; cursor:pointer; font-family:inherit; white-space:nowrap;
+                    ">✅ Resolve</button>
+                  `
+                      : ''
+                  }
+                </div>
+              </div>
+            </div>
+          `
+                  )
+                  .join('')
+          }
+        </div>
+
+        <!-- Listings Tab -->
+        <div id="admin-content-listings" style="display:none;">
+          ${(allListings || [])
+            .map(
+              (listing) => `
+            <div style="
+              display:flex; gap:12px; align-items:center;
+              padding:12px; border-radius:12px; margin-bottom:8px;
+              background:rgba(255,255,255,0.02);
+              border:1px solid rgba(255,255,255,0.05);
+            ">
+              <div style="
+                width:48px; height:48px; border-radius:8px; flex-shrink:0; overflow:hidden;
+                background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+                display:flex; align-items:center; justify-content:center;
+              ">
+                ${listing.images?.[0] ? `<img src="${listing.images[0]}" style="width:100%;height:100%;object-fit:cover;">` : '🛍️'}
+              </div>
+              <div style="flex:1; min-width:0;">
+                <p style="font-size:0.9rem; font-weight:600; color:#f3f4f6;">${listing.title}</p>
+                <p style="font-size:0.78rem; color:#9ca3af;">
+                  ₹${listing.price} • ${listing.category} • by ${listing.users?.name || 'Unknown'}
+                </p>
+                <span style="
+                  font-size:0.72rem; font-weight:600; padding:1px 8px; border-radius:20px;
+                  background:${listing.status === 'active' ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)'};
+                  color:${listing.status === 'active' ? '#10b981' : '#ef4444'};
+                ">${listing.status}</span>
+              </div>
+              <button onclick="adminDeleteListing('${listing.id}', null)" style="
+                padding:6px 12px; border-radius:8px; font-size:0.75rem;
+                background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2);
+                color:#ef4444; cursor:pointer; font-family:inherit;
+              ">🗑️ Delete</button>
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+
+        <!-- Users Tab -->
+        <div id="admin-content-users" style="display:none;">
+          ${(allUsers || [])
+            .map(
+              (user) => `
+            <div style="
+              display:flex; gap:12px; align-items:center;
+              padding:12px; border-radius:12px; margin-bottom:8px;
+              background:rgba(255,255,255,0.02);
+              border:1px solid rgba(255,255,255,0.05);
+            ">
+              <div style="
+                width:44px; height:44px; border-radius:50%; flex-shrink:0;
+                background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+                display:flex; align-items:center; justify-content:center;
+                font-weight:700; color:white; font-size:1rem;
+              ">${getInitials(user.name || user.email.split('@')[0])}</div>
+              <div style="flex:1; min-width:0;">
+                <p style="font-size:0.9rem; font-weight:600; color:#f3f4f6;">${user.name || 'No name'}</p>
+                <p style="font-size:0.78rem; color:#9ca3af;">${user.email}</p>
+                <div style="display:flex; gap:6px; margin-top:4px;">
+                  ${user.verified ? `<span style="font-size:0.7rem; color:#10b981; background:rgba(16,185,129,0.1); padding:1px 6px; border-radius:10px;">✓ Verified</span>` : ''}
+                  ${user.hostel_block ? `<span style="font-size:0.7rem; color:#9ca3af; background:rgba(255,255,255,0.05); padding:1px 6px; border-radius:10px;">${user.hostel_block}</span>` : ''}
+                </div>
+              </div>
+              ${
+                user.email !== 'mn6733@srmist.edu.in'
+                  ? `
+                <button onclick="adminBanUser('${user.id}', '${user.email}')" style="
+                  padding:6px 12px; border-radius:8px; font-size:0.75rem;
+                  background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2);
+                  color:#ef4444; cursor:pointer; font-family:inherit;
+                ">🚫 Ban</button>
+              `
+                  : '<span style="font-size:0.75rem; color:#f59e0b;">👑 Admin</span>'
+              }
+            </div>
+          `
+            )
+            .join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+function adminSwitchTab(tab) {
+  ['reports', 'listings', 'users'].forEach((t) => {
+    const content = document.getElementById(`admin-content-${t}`);
+    const tabBtn = document.getElementById(`admin-tab-${t}`);
+    if (content) content.style.display = t === tab ? 'block' : 'none';
+    if (tabBtn) {
+      tabBtn.style.background =
+        t === tab ? 'rgba(139,92,246,0.1)' : 'transparent';
+      tabBtn.style.color = t === tab ? '#8b5cf6' : '#9ca3af';
+      tabBtn.style.borderBottom =
+        t === tab ? '2px solid #8b5cf6' : '2px solid transparent';
+    }
+  });
+}
+
+async function adminDeleteListing(listingId, reportId) {
+  if (!confirm('Delete this listing permanently?')) return;
+
+  await db.from('listings').delete().eq('id', listingId);
+
+  if (reportId) {
+    await db.from('reports').update({ status: 'resolved' }).eq('id', reportId);
+  }
+
+  showToast('Listing deleted!');
+  loadListingsFromSupabase();
+  openAdminPanel();
+}
+
+async function adminResolveReport(reportId) {
+  await db.from('reports').update({ status: 'resolved' }).eq('id', reportId);
+
+  showToast('Report marked as resolved!');
+  openAdminPanel();
+}
+
+async function adminBanUser(userId, email) {
+  if (!confirm(`Ban user ${email}? This will delete all their listings.`))
+    return;
+
+  // Delete all their listings first
+  await db.from('listings').delete().eq('user_id', userId);
+  // Delete user profile
+  await db.from('users').delete().eq('id', userId);
+
+  showToast(`User ${email} has been banned!`);
+  openAdminPanel();
 }
