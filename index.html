@@ -569,6 +569,34 @@
                     </svg>
                     My Listings
                   </button>
+                  <button class="dropdown-item" onclick="openInbox()">
+                    <svg
+                      class="dropdown-icon"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"
+                      ></path>
+                    </svg>
+                    My Messages
+                    <span
+                      id="unread-badge"
+                      style="
+                        display: none;
+                        margin-left: auto;
+                        background: #ef4444;
+                        color: white;
+                        font-size: 0.7rem;
+                        font-weight: 700;
+                        padding: 2px 7px;
+                        border-radius: 20px;
+                      "
+                      >0</span
+                    >
+                  </button>
                   <button class="dropdown-item" onclick="openSavedItems()">
                     <svg
                       class="dropdown-icon"
@@ -886,9 +914,26 @@
               <!-- Seller Details & Action -->
               <div class="seller-card">
                 <div class="seller-info">
-                  <div class="seller-avatar" id="modal-seller-avatar">AS</div>
+                  <div
+                    class="seller-avatar"
+                    id="modal-seller-avatar"
+                    onclick="viewSellerProfile()"
+                    style="cursor: pointer"
+                  >
+                    AS
+                  </div>
                   <div class="seller-meta">
-                    <h4 id="modal-seller-name">Aditya Sharma</h4>
+                    <h4
+                      id="modal-seller-name"
+                      onclick="viewSellerProfile()"
+                      style="
+                        cursor: pointer;
+                        text-decoration: underline;
+                        text-underline-offset: 3px;
+                      "
+                    >
+                      Aditya Sharma
+                    </h4>
                     <p class="seller-verif-status">
                       <svg
                         viewBox="0 0 24 24"

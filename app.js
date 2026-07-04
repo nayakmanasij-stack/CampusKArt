@@ -357,6 +357,7 @@ function openProductModal(id) {
   document.getElementById('modal-condition').textContent = item.condition;
   document.getElementById('modal-location').textContent = item.location;
   document.getElementById('modal-description').textContent = item.description;
+  document.getElementById('modal-date').textContent = item.date;
   document.getElementById('modal-seller-name').textContent = item.seller;
   document.getElementById('modal-seller-avatar').textContent = item.initials;
 
@@ -978,6 +979,9 @@ async function showMainApp() {
     userInitials.textContent = getInitials(currentUser.email.split('@')[0]);
 
   loadListingsFromSupabase();
+  checkUnreadMessages();
+  // Check for new messages every 30 seconds
+  setInterval(checkUnreadMessages, 30000);
   console.log('✅ Logged in as:', currentUser.email);
 }
 async function handleLogout() {
@@ -1095,6 +1099,8 @@ async function checkIfSaved(listingId) {
 }
 
 // ==================== REAL MESSAGING ====================
+let activeRealtimeChannel = null;
+
 async function startRealChat(listingId, sellerId) {
   if (!currentUser) {
     alert('Please sign in first');
@@ -1128,12 +1134,66 @@ async function startRealChat(listingId, sellerId) {
       container.innerHTML += `
         <div class="msg ${isMine ? 'user-msg' : 'seller-msg'}">
           ${msg.message}
+          <span style="font-size:0.65rem; opacity:0.5; display:block; margin-top:2px;">
+            ${new Date(msg.sent_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+          </span>
         </div>
       `;
     });
   }
 
   container.scrollTop = container.scrollHeight;
+
+  // Mark messages as read
+  await db
+    .from('messages')
+    .update({ read: true })
+    .eq('listing_id', listingId)
+    .eq('receiver_id', currentUser.id);
+
+  // Unsubscribe from previous channel
+  if (activeRealtimeChannel) {
+    db.removeChannel(activeRealtimeChannel);
+  }
+
+  // Subscribe to real-time updates
+  activeRealtimeChannel = db
+    .channel(`messages:${listingId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `listing_id=eq.${listingId}`,
+      },
+      (payload) => {
+        const msg = payload.new;
+        // Only show if it's for this conversation
+        if (
+          msg.sender_id === currentUser.id ||
+          msg.receiver_id === currentUser.id
+        ) {
+          const isMine = msg.sender_id === currentUser.id;
+          // Avoid duplicate messages
+          const container = document.getElementById('chat-messages-container');
+          if (container) {
+            container.innerHTML += `
+            <div class="msg ${isMine ? 'user-msg' : 'seller-msg'}">
+              ${msg.message}
+              <span style="font-size:0.65rem; opacity:0.5; display:block; margin-top:2px;">
+                ${new Date(msg.sent_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+          `;
+            container.scrollTop = container.scrollHeight;
+          }
+        }
+      }
+    )
+    .subscribe();
+
+  console.log('✅ Real-time chat started for listing:', listingId);
 }
 
 async function sendRealMessage(event, listingId, sellerId) {
@@ -1141,6 +1201,8 @@ async function sendRealMessage(event, listingId, sellerId) {
   const input = document.getElementById('chat-input-field');
   const message = input.value.trim();
   if (!message) return;
+
+  input.value = '';
 
   const { error } = await db.from('messages').insert({
     sender_id: currentUser.id,
@@ -1151,16 +1213,10 @@ async function sendRealMessage(event, listingId, sellerId) {
 
   if (error) {
     console.error('Message error:', error);
+    input.value = message; // restore on error
     return;
   }
-
-  // Add message to UI
-  const container = document.getElementById('chat-messages-container');
-  container.innerHTML += `
-    <div class="msg user-msg">${message}</div>
-  `;
-  container.scrollTop = container.scrollHeight;
-  input.value = '';
+  // Realtime will handle displaying the message
 }
 // ==================== SAVED ITEMS PAGE ====================
 async function openSavedItems() {
@@ -1644,4 +1700,354 @@ async function uploadAvatar(event) {
   // Update UI
   showToast('Profile photo updated!');
   openProfile(); // Refresh profile modal
+}
+// ==================== SELLER PROFILE ====================
+async function viewSellerProfile() {
+  if (!currentActiveListing) return;
+
+  const sellerId = currentActiveListing.user_id;
+  if (!sellerId) {
+    showToast('Seller info not available');
+    return;
+  }
+
+  // Fetch seller data
+  const { data: seller, error } = await db
+    .from('users')
+    .select('*')
+    .eq('id', sellerId)
+    .single();
+
+  if (error || !seller) {
+    showToast('Could not load seller profile');
+    return;
+  }
+
+  // Fetch seller's active listings count
+  const { count: listingCount } = await db
+    .from('listings')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', sellerId)
+    .eq('status', 'active');
+
+  const name = seller.name || seller.email.split('@')[0];
+  const initials = getInitials(name);
+
+  const existingModal = document.getElementById('seller-profile-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'seller-profile-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width:90%; max-width:420px;
+      background:rgba(13,18,30,0.97);
+      backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:24px; overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.7);
+    ">
+      <!-- Cover -->
+      <div style="
+        height:90px;
+        background:linear-gradient(135deg,#8b5cf6 0%,#3d3f98 50%,#1e1b4b 100%);
+        position:relative;
+      ">
+        <button onclick="document.getElementById('seller-profile-modal').remove()" style="
+          position:absolute; top:12px; right:12px;
+          width:30px; height:30px; border-radius:50%;
+          background:rgba(0,0,0,0.3); border:1px solid rgba(255,255,255,0.15);
+          color:white; cursor:pointer; font-size:0.85rem;
+        ">✕</button>
+
+        <!-- Avatar -->
+        <div style="
+          position:absolute; bottom:-36px; left:24px;
+          width:72px; height:72px; border-radius:50%;
+          border:3px solid rgba(13,18,30,0.97);
+          overflow:hidden;
+          background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+          display:flex; align-items:center; justify-content:center;
+        ">
+          ${
+            seller.avatar_url
+              ? `<img src="${seller.avatar_url}" style="width:100%;height:100%;object-fit:cover;">`
+              : `<span style="font-size:1.6rem;font-weight:700;color:white;">${initials}</span>`
+          }
+        </div>
+      </div>
+
+      <!-- Info -->
+      <div style="padding:44px 24px 24px;">
+        <div style="margin-bottom:20px;">
+          <h2 style="font-size:1.2rem; font-weight:700; color:#f3f4f6; margin-bottom:4px;">${name}</h2>
+          <p style="font-size:0.82rem; color:#8b5cf6; margin-bottom:8px;">${seller.email}</p>
+          <span style="
+            font-size:0.75rem; color:#10b981; font-weight:600;
+            background:rgba(16,185,129,0.1); padding:3px 10px;
+            border-radius:20px; border:1px solid rgba(16,185,129,0.2);
+          ">✓ SRM Verified</span>
+        </div>
+
+        <!-- Details Grid -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px;">
+          <div style="
+            padding:14px; border-radius:12px;
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.06);
+          ">
+            <p style="font-size:0.72rem; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Hostel</p>
+            <p style="font-size:0.9rem; font-weight:600; color:#f3f4f6;">${seller.hostel_block || 'Not set'}</p>
+          </div>
+          <div style="
+            padding:14px; border-radius:12px;
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.06);
+          ">
+            <p style="font-size:0.72rem; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Year</p>
+            <p style="font-size:0.9rem; font-weight:600; color:#f3f4f6;">${seller.year || 'Not set'}</p>
+          </div>
+          <div style="
+            padding:14px; border-radius:12px;
+            background:rgba(255,255,255,0.03);
+            border:1px solid rgba(255,255,255,0.06);
+          ">
+            <p style="font-size:0.72rem; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Branch</p>
+            <p style="font-size:0.9rem; font-weight:600; color:#f3f4f6;">${seller.branch || 'Not set'}</p>
+          </div>
+          <div style="
+            padding:14px; border-radius:12px;
+            background:rgba(139,92,246,0.08);
+            border:1px solid rgba(139,92,246,0.15);
+          ">
+            <p style="font-size:0.72rem; color:#9ca3af; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px;">Active Listings</p>
+            <p style="font-size:1.4rem; font-weight:800; color:#8b5cf6;">${listingCount || 0}</p>
+          </div>
+        </div>
+
+        <!-- Message Button -->
+        <button onclick="document.getElementById('seller-profile-modal').remove(); startRealChat(currentModalListingId, '${sellerId}')" style="
+          width:100%; padding:13px; border-radius:12px;
+          background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+          color:white; border:none; cursor:pointer;
+          font-size:0.95rem; font-weight:700; font-family:inherit;
+          box-shadow:0 4px 20px rgba(139,92,246,0.3);
+        ">
+          💬 Message ${name.split(' ')[0]}
+        </button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+// ==================== MESSAGES INBOX ====================
+async function openInbox() {
+  closeProfileDropdown();
+
+  // Get all conversations for current user
+  const { data: messages, error } = await db
+    .from('messages')
+    .select(
+      '*, listings(title, images), sender:users!messages_sender_id_fkey(name, email), receiver:users!messages_receiver_id_fkey(name, email)'
+    )
+    .or(`sender_id.eq.${currentUser.id},receiver_id.eq.${currentUser.id}`)
+    .order('sent_at', { ascending: false });
+
+  if (error) {
+    console.error('Inbox error:', error);
+    return;
+  }
+
+  // Group by listing_id to get unique conversations
+  const conversations = {};
+  (messages || []).forEach((msg) => {
+    if (!conversations[msg.listing_id]) {
+      const isMe = msg.sender_id === currentUser.id;
+      const otherUser = isMe ? msg.receiver : msg.sender;
+      conversations[msg.listing_id] = {
+        listingId: msg.listing_id,
+        listingTitle: msg.listings?.title || 'Unknown Item',
+        listingImage: msg.listings?.images?.[0] || null,
+        otherUser: otherUser,
+        otherId: isMe ? msg.receiver_id : msg.sender_id,
+        lastMessage: msg.message,
+        lastTime: msg.sent_at,
+        unread: !msg.read && msg.receiver_id === currentUser.id,
+      };
+    }
+  });
+
+  const convList = Object.values(conversations);
+
+  const existingModal = document.getElementById('inbox-modal');
+  if (existingModal) existingModal.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'inbox-modal';
+  modal.className = 'modal-backdrop active';
+  modal.onclick = (e) => {
+    if (e.target === modal) modal.remove();
+  };
+
+  modal.innerHTML = `
+    <div onclick="event.stopPropagation()" style="
+      width:90%; max-width:520px;
+      background:rgba(13,18,30,0.97);
+      backdrop-filter:blur(24px);
+      border:1px solid rgba(255,255,255,0.07);
+      border-radius:24px; overflow:hidden;
+      box-shadow:0 32px 80px rgba(0,0,0,0.7);
+      max-height:85vh; display:flex; flex-direction:column;
+    ">
+      <!-- Header -->
+      <div style="
+        padding:22px 24px 18px;
+        border-bottom:1px solid rgba(255,255,255,0.06);
+        display:flex; justify-content:space-between; align-items:center;
+        background:rgba(139,92,246,0.04);
+      ">
+        <div>
+          <h2 style="font-size:1.15rem; font-weight:700; color:#f3f4f6;">Messages</h2>
+          <p style="font-size:0.78rem; color:#9ca3af; margin-top:2px;">${convList.length} conversation${convList.length !== 1 ? 's' : ''}</p>
+        </div>
+        <button onclick="document.getElementById('inbox-modal').remove()" style="
+          width:32px; height:32px; border-radius:50%;
+          background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.08);
+          color:#9ca3af; cursor:pointer; font-size:1rem;
+        ">✕</button>
+      </div>
+
+      <!-- Conversations -->
+      <div style="overflow-y:auto; flex:1; padding:12px;">
+        ${
+          convList.length === 0
+            ? `
+          <div style="text-align:center; padding:60px 0;">
+            <div style="font-size:3rem; margin-bottom:12px;">💬</div>
+            <h3 style="color:#f3f4f6; font-size:1rem; margin-bottom:8px;">No messages yet</h3>
+            <p style="color:#9ca3af; font-size:0.85rem;">Start a conversation by clicking "Chat with Seller" on any listing</p>
+          </div>
+        `
+            : convList
+                .map(
+                  (conv) => `
+          <div onclick="openConversation('${conv.listingId}', '${conv.otherId}')" style="
+            display:flex; gap:14px; align-items:center;
+            padding:14px; border-radius:14px; margin-bottom:8px;
+            background:${conv.unread ? 'rgba(139,92,246,0.08)' : 'rgba(255,255,255,0.02)'};
+            border:1px solid ${conv.unread ? 'rgba(139,92,246,0.2)' : 'rgba(255,255,255,0.05)'};
+            cursor:pointer; transition:all 0.2s;
+          ">
+            <!-- Item Image -->
+            <div style="
+              width:52px; height:52px; border-radius:10px; flex-shrink:0; overflow:hidden;
+              background:linear-gradient(135deg,#8b5cf6,#3d3f98);
+              display:flex; align-items:center; justify-content:center;
+            ">
+              ${
+                conv.listingImage
+                  ? `<img src="${conv.listingImage}" style="width:100%;height:100%;object-fit:cover;">`
+                  : '🛍️'
+              }
+            </div>
+
+            <!-- Info -->
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:3px;">
+                <h4 style="font-size:0.9rem; font-weight:600; color:#f3f4f6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">
+                  ${conv.listingTitle}
+                </h4>
+                <span style="font-size:0.72rem; color:#9ca3af; flex-shrink:0; margin-left:8px;">
+                  ${new Date(conv.lastTime).toLocaleDateString('en-IN')}
+                </span>
+              </div>
+              <p style="font-size:0.8rem; color:#9ca3af; margin-bottom:3px;">
+                with ${conv.otherUser?.name || conv.otherUser?.email?.split('@')[0] || 'Student'}
+              </p>
+              <p style="font-size:0.82rem; color:${conv.unread ? '#f3f4f6' : '#6b7280'}; 
+                white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:${conv.unread ? '600' : '400'}">
+                ${conv.lastMessage}
+              </p>
+            </div>
+
+            ${
+              conv.unread
+                ? `
+              <div style="width:8px; height:8px; border-radius:50%; background:#8b5cf6; flex-shrink:0;"></div>
+            `
+                : ''
+            }
+          </div>
+        `
+                )
+                .join('')
+        }
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+}
+
+async function openConversation(listingId, otherId) {
+  document.getElementById('inbox-modal')?.remove();
+
+  // Find the listing and open its modal
+  const { data: listing } = await db
+    .from('listings')
+    .select('*')
+    .eq('id', listingId)
+    .single();
+
+  if (listing) {
+    // Add to listings array temporarily if not there
+    const exists = listings.find((l) => l.id === listingId);
+    if (!exists) {
+      listings.push({
+        id: listing.id,
+        title: listing.title,
+        description: listing.description || '',
+        price: listing.price,
+        category: listing.category,
+        condition: listing.condition,
+        location: listing.hostel_block || 'SRM Campus',
+        date: new Date(listing.created_at).toLocaleDateString('en-IN'),
+        seller: 'SRM Student',
+        initials: 'SS',
+        imageSrc: listing.images?.[0] || null,
+        iconType: listing.category.toLowerCase(),
+        imageColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        user_id: listing.user_id,
+      });
+    }
+    openProductModal(listingId);
+    setTimeout(() => startRealChat(listingId, otherId), 500);
+  }
+}
+
+// Check unread messages count
+async function checkUnreadMessages() {
+  if (!currentUser) return;
+
+  const { count } = await db
+    .from('messages')
+    .select('*', { count: 'exact', head: true })
+    .eq('receiver_id', currentUser.id)
+    .eq('read', false);
+
+  const badge = document.getElementById('unread-badge');
+  if (badge) {
+    if (count > 0) {
+      badge.style.display = 'inline-block';
+      badge.textContent = count;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
 }
