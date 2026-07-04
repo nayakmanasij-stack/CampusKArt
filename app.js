@@ -151,7 +151,7 @@ async function handleSearch(query) {
   // Search directly in Supabase
   const { data, error } = await db
     .from('listings')
-    .select('*, users(name)')
+    .select('*, users(name, verified)')
     .eq('status', 'active')
     .or(
       `title.ilike.%${activeFilters.search}%,description.ilike.%${activeFilters.search}%`
@@ -179,6 +179,9 @@ async function handleSearch(query) {
     iconType: item.category.toLowerCase(),
     imageColor: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
     user_id: item.user_id,
+    user_id: item.user_id,
+    verified: item.users?.verified || false,
+    views: item.views || 0,
   }));
 
   renderProducts();
@@ -328,7 +331,16 @@ function renderProducts() {
             <div class="product-footer">
               <div class="seller-bubble">
                 <div class="avatar-mini">${item.initials}</div>
-                <span class="seller-name">${item.seller}</span>
+               <span class="seller-name">${item.seller}</span>
+${
+  item.verified
+    ? `<span style="
+  font-size:0.65rem; color:#10b981; font-weight:700;
+  background:rgba(16,185,129,0.1); padding:1px 6px;
+  border-radius:20px; border:1px solid rgba(16,185,129,0.2);
+">✓</span>`
+    : ''
+}
               </div>
               <span class="card-time">${item.date}</span>
             </div>
@@ -349,6 +361,11 @@ function openProductModal(id) {
 
   currentActiveListing = item;
   currentModalListingId = item.id;
+  // Increment view counter
+  db.from('listings')
+    .update({ views: (item.views || 0) + 1 })
+    .eq('id', item.id)
+    .then(() => console.log('View counted'));
   checkIfSaved(item.id);
   // Populate elements
   document.getElementById('modal-badge-category').textContent = item.category;
@@ -358,6 +375,9 @@ function openProductModal(id) {
   document.getElementById('modal-location').textContent = item.location;
   document.getElementById('modal-description').textContent = item.description;
   document.getElementById('modal-date').textContent = item.date;
+  document.getElementById('modal-date').textContent = item.date;
+  const viewsEl = document.getElementById('modal-views');
+  if (viewsEl) viewsEl.textContent = (item.views || 0) + 1 + ' views';
   document.getElementById('modal-seller-name').textContent = item.seller;
   document.getElementById('modal-seller-avatar').textContent = item.initials;
 
@@ -1005,7 +1025,7 @@ async function handleLogout() {
 async function loadListingsFromSupabase() {
   const { data, error } = await db
     .from('listings')
-    .select('*, users(name)')
+    .select('*, users(name, verified)')
     .eq('status', 'active')
     .order('created_at', { ascending: false });
 
@@ -1224,7 +1244,7 @@ async function openSavedItems() {
 
   const { data, error } = await db
     .from('saved_items')
-    .select('*, listings(*, users(name))')
+    .select('*, listings(*, users(name, verified))')
     .eq('user_id', currentUser.id)
     .order('saved_at', { ascending: false });
 
