@@ -999,9 +999,8 @@ async function showMainApp() {
     userInitials.textContent = getInitials(currentUser.email.split('@')[0]);
 
   loadListingsFromSupabase();
-  checkUnreadMessages();
-  // Check for new messages every 30 seconds
-  setInterval(checkUnreadMessages, 30000);
+  loadNotifications();
+  setInterval(loadNotifications, 30000);
   console.log('✅ Logged in as:', currentUser.email);
 }
 async function handleLogout() {
@@ -2070,4 +2069,172 @@ async function checkUnreadMessages() {
       badge.style.display = 'none';
     }
   }
+}
+// ==================== NOTIFICATIONS ====================
+let notifications = [];
+
+async function loadNotifications() {
+  if (!currentUser) return;
+
+  // Get unread messages as notifications
+  const { data: unreadMessages } = await db
+    .from('messages')
+    .select('*, listings(title), sender:users!messages_sender_id_fkey(name)')
+    .eq('receiver_id', currentUser.id)
+    .eq('read', false)
+    .order('sent_at', { ascending: false })
+    .limit(10);
+
+  notifications = (unreadMessages || []).map((msg) => ({
+    id: msg.id,
+    type: 'message',
+    text: `${msg.sender?.name || 'Someone'} sent you a message about "${msg.listings?.title || 'a listing'}"`,
+    time: msg.sent_at,
+    listingId: msg.listing_id,
+    senderId: msg.sender_id,
+  }));
+
+  // Update badge
+  const badge = document.getElementById('notif-badge');
+  if (badge) {
+    if (notifications.length > 0) {
+      badge.style.display = 'flex';
+      badge.textContent =
+        notifications.length > 9 ? '9+' : notifications.length;
+    } else {
+      badge.style.display = 'none';
+    }
+  }
+
+  // Update unread messages badge too
+  const unreadBadge = document.getElementById('unread-badge');
+  if (unreadBadge) {
+    if (notifications.length > 0) {
+      unreadBadge.style.display = 'inline-block';
+      unreadBadge.textContent = notifications.length;
+    } else {
+      unreadBadge.style.display = 'none';
+    }
+  }
+}
+
+async function openNotifications() {
+  await loadNotifications();
+
+  const existingModal = document.getElementById('notif-modal');
+  if (existingModal) {
+    existingModal.remove();
+    return;
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'notif-modal';
+  modal.style.cssText = `
+    position:fixed; top:70px; right:80px; z-index:9999;
+    width:340px;
+    background:rgba(13,18,30,0.97);
+    backdrop-filter:blur(24px);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:16px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.6);
+    overflow:hidden;
+  `;
+
+  modal.innerHTML = `
+    <!-- Header -->
+    <div style="
+      padding:16px 20px 12px;
+      border-bottom:1px solid rgba(255,255,255,0.06);
+      display:flex; justify-content:space-between; align-items:center;
+    ">
+      <h3 style="font-size:1rem; font-weight:700; color:#f3f4f6;">Notifications</h3>
+      ${
+        notifications.length > 0
+          ? `
+        <button onclick="markAllRead()" style="
+          font-size:0.75rem; color:#8b5cf6; background:none;
+          border:none; cursor:pointer; font-family:inherit;
+        ">Mark all read</button>
+      `
+          : ''
+      }
+    </div>
+
+    <!-- List -->
+    <div style="max-height:360px; overflow-y:auto;">
+      ${
+        notifications.length === 0
+          ? `
+        <div style="text-align:center; padding:40px 20px;">
+          <div style="font-size:2.5rem; margin-bottom:10px;">🔔</div>
+          <p style="color:#9ca3af; font-size:0.85rem;">No new notifications</p>
+        </div>
+      `
+          : notifications
+              .map(
+                (notif) => `
+        <div onclick="handleNotifClick('${notif.listingId}', '${notif.senderId}')" style="
+          padding:14px 20px;
+          border-bottom:1px solid rgba(255,255,255,0.04);
+          cursor:pointer; transition:background 0.2s;
+          display:flex; gap:12px; align-items:flex-start;
+        " onmouseover="this.style.background='rgba(255,255,255,0.03)'"
+           onmouseout="this.style.background='none'">
+          <div style="
+            width:36px; height:36px; border-radius:50%; flex-shrink:0;
+            background:rgba(139,92,246,0.15);
+            display:flex; align-items:center; justify-content:center;
+            font-size:1rem;
+          ">💬</div>
+          <div style="flex:1;">
+            <p style="font-size:0.85rem; color:#f3f4f6; line-height:1.4; margin-bottom:4px;">
+              ${notif.text}
+            </p>
+            <p style="font-size:0.75rem; color:#9ca3af;">
+              ${new Date(notif.time).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+              · ${new Date(notif.time).toLocaleDateString('en-IN')}
+            </p>
+          </div>
+          <div style="width:8px; height:8px; border-radius:50%; background:#8b5cf6; flex-shrink:0; margin-top:4px;"></div>
+        </div>
+      `
+              )
+              .join('')
+      }
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // Close when clicking outside
+  setTimeout(() => {
+    document.addEventListener('click', function closeNotif(e) {
+      if (
+        !modal.contains(e.target) &&
+        e.target !== document.getElementById('notif-btn')
+      ) {
+        modal.remove();
+        document.removeEventListener('click', closeNotif);
+      }
+    });
+  }, 100);
+}
+
+async function handleNotifClick(listingId, senderId) {
+  document.getElementById('notif-modal')?.remove();
+  await openConversation(listingId, senderId);
+}
+
+async function markAllRead() {
+  await db
+    .from('messages')
+    .update({ read: true })
+    .eq('receiver_id', currentUser.id)
+    .eq('read', false);
+
+  notifications = [];
+  document.getElementById('notif-modal')?.remove();
+  document.getElementById('notif-badge').style.display = 'none';
+  document.getElementById('unread-badge').style.display = 'none';
+  showToast('All notifications marked as read!');
 }
