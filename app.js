@@ -31,6 +31,7 @@ let activeFilters = {
 };
 
 let selectedNewListingImage = null;
+let selectedImages = []; // multiple images
 let activeChatTimeout = null;
 
 // ==================== APP INITIALIZATION ====================
@@ -529,45 +530,6 @@ function triggerFileInput() {
   document.getElementById('sell-image-file').click();
 }
 
-async function handleImageSelect(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  // Show preview immediately
-  const reader = new FileReader();
-  reader.onload = function (e) {
-    document.getElementById('image-preview-element').src = e.target.result;
-    document.getElementById('upload-zone-content').style.display = 'none';
-    document.getElementById('upload-zone-preview').style.display = 'block';
-  };
-  reader.readAsDataURL(file);
-
-  // Upload to Supabase Storage
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${currentUser.id}/${Date.now()}.${fileExt}`;
-
-  const { data, error } = await db.storage
-    .from('listing-images')
-    .upload(fileName, file, {
-      cacheControl: '3600',
-      upsert: false,
-    });
-
-  if (error) {
-    console.error('Image upload error:', error);
-    alert('Image upload failed: ' + error.message);
-    return;
-  }
-
-  // Get public URL
-  const {
-    data: { publicUrl },
-  } = db.storage.from('listing-images').getPublicUrl(fileName);
-
-  selectedNewListingImage = publicUrl;
-  console.log('✅ Image uploaded:', publicUrl);
-}
-
 function removeImageSelect(event = null) {
   if (event) event.stopPropagation(); // prevent triggering upload trigger
   selectedNewListingImage = null;
@@ -575,7 +537,88 @@ function removeImageSelect(event = null) {
   document.getElementById('upload-zone-content').style.display = 'flex';
   document.getElementById('upload-zone-preview').style.display = 'none';
 }
+async function handleImageSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
 
+  document.getElementById('sell-image-file').value = '';
+
+  if (selectedImages.length >= 4) {
+    showToast('Maximum 4 images allowed!');
+    return;
+  }
+
+  const grid = document.getElementById('image-upload-grid');
+  const addBtn = document.getElementById('add-image-btn');
+
+  const placeholder = document.createElement('div');
+  placeholder.style.cssText = `
+    aspect-ratio:1; border-radius:12px;
+    background:rgba(139,92,246,0.1);
+    border:1px solid rgba(139,92,246,0.2);
+    display:flex; align-items:center; justify-content:center;
+    font-size:0.75rem; color:#8b5cf6;
+  `;
+  placeholder.textContent = 'Uploading...';
+  grid.insertBefore(placeholder, addBtn);
+
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${currentUser.id}/${Date.now()}.${fileExt}`;
+
+  const { error } = await db.storage
+    .from('listing-images')
+    .upload(fileName, file, { cacheControl: '3600', upsert: false });
+
+  if (error) {
+    placeholder.remove();
+    showToast('Upload failed: ' + error.message);
+    return;
+  }
+
+  const {
+    data: { publicUrl },
+  } = db.storage.from('listing-images').getPublicUrl(fileName);
+
+  selectedImages.push(publicUrl);
+  selectedNewListingImage = selectedImages[0];
+
+  const index = selectedImages.length - 1;
+  placeholder.style.cssText = `
+    aspect-ratio:1; border-radius:12px;
+    overflow:hidden; position:relative;
+    border:1px solid rgba(255,255,255,0.08);
+  `;
+  placeholder.innerHTML = `
+    <img src="${publicUrl}" style="width:100%; height:100%; object-fit:cover;">
+    ${
+      index === 0
+        ? `<span style="
+      position:absolute; top:4px; left:4px;
+      background:rgba(139,92,246,0.9); color:white;
+      font-size:0.6rem; padding:2px 6px; border-radius:4px; font-weight:700;
+    ">MAIN</span>`
+        : ''
+    }
+    <button onclick="removeImage(${index}, this)" style="
+      position:absolute; top:4px; right:4px;
+      width:20px; height:20px; border-radius:50%;
+      background:rgba(239,68,68,0.9); border:none;
+      color:white; cursor:pointer; font-size:0.7rem;
+      display:flex; align-items:center; justify-content:center;
+    ">✕</button>
+  `;
+
+  if (selectedImages.length >= 4) addBtn.style.display = 'none';
+  showToast('Photo added!');
+}
+
+function removeImage(index, btn) {
+  selectedImages.splice(index, 1);
+  selectedNewListingImage = selectedImages[0] || null;
+  btn.closest('div').remove();
+  const addBtn = document.getElementById('add-image-btn');
+  if (addBtn) addBtn.style.display = 'flex';
+}
 async function handleNewListing(event) {
   event.preventDefault();
   const title = document.getElementById('sell-title').value.trim();
